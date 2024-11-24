@@ -45,7 +45,7 @@ public class CraftInventoryPlayer extends CraftInventory implements PlayerInvent
     }
 
     public ItemStack getBoots() {
-        return getItem(getSize());
+        return getItem(getSize() + 0);
     }
 
     public void setHelmet(ItemStack helmet) {
@@ -61,13 +61,13 @@ public class CraftInventoryPlayer extends CraftInventory implements PlayerInvent
     }
 
     public void setBoots(ItemStack boots) {
-        setItem(getSize(), boots);
+        setItem(getSize() + 0, boots);
     }
 
     public ItemStack[] getArmorContents() {
         ArrayList<ItemStack> contents = new ArrayList<>();
 
-        ItemStack boots = getItem(getSize());
+        ItemStack boots = getItem(getSize() + 0);
         if (boots != null && boots.getType() != Material.AIR) {
             contents.add(boots);
         }
