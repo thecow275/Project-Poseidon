@@ -30,6 +30,7 @@ public class BlockTorch extends Block {
     }
 
     public void postPlace(World world, int i, int j, int k, int l) {
+        if (world.getTypeId(i, j, k) != this.id) return;
         int i1 = world.getData(i, j, k);
 
         if (l == 1 && this.g(world, i, j - 1, k)) {
@@ -111,7 +112,7 @@ public class BlockTorch extends Block {
     }
 
     private boolean h(World world, int i, int j, int k) {
-        if (!this.canPlace(world, i, j, k)) {
+        if (!this.canPlace(world, i, j, k) && world.getTypeId(i, j, k) == this.id) {
             this.g(world, i, j, k, world.getData(i, j, k));
             world.setTypeId(i, j, k, 0);
             return false;
