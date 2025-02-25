@@ -1,11 +1,16 @@
 package net.minecraft.server;
 
+import com.legacyminecraft.poseidon.Poseidon;
 import com.legacyminecraft.poseidon.PoseidonConfig;
+import com.legacyminecraft.poseidon.PoseidonPlugin;
 import com.legacyminecraft.poseidon.util.ServerLogRotator;
+import com.legacyminecraft.poseidon.utility.PerformanceStatistic;
+import com.legacyminecraft.poseidon.utility.PoseidonVersionChecker;
 import com.projectposeidon.johnymuffin.UUIDManager;
 import com.legacyminecraft.poseidon.watchdog.WatchDogThread;
 import jline.ConsoleReader;
 import joptsimple.OptionSet;
+import org.bukkit.Bukkit;
 import org.bukkit.World.Environment;
 import org.bukkit.craftbukkit.CraftServer;
 import org.bukkit.craftbukkit.LoggerOutputStream;
@@ -64,8 +69,9 @@ public class MinecraftServer implements Runnable, ICommandListener {
     // CraftBukkit end
 
     //Poseidon Start
-    private WatchDogThread watchDogThread;
+//    private WatchDogThread watchDogThread;
     private boolean modLoaderSupport = false;
+//    private PoseidonVersionChecker poseidonVersionChecker;
     //Poseidon End
 
     public MinecraftServer(OptionSet options) { // CraftBukkit - adds argument OptionSet
@@ -96,7 +102,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
         // CraftBukkit end
 
         //If Poseidon Config DEBUG is enabled, enable debug mode
-        if(options.has("debug-config")) {
+        if (options.has("debug-config")) {
             log.info("[Poseidon] Configuration debug mode has been enabled. This will cause the poseidon.yml to be reloaded every time the server starts.");
             PoseidonConfig.getInstance().resetConfig();
         }
@@ -171,26 +177,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
         this.a(new WorldLoaderServer(new File(".")), s1, k);
 
         //Project Poseidon Start
-        log.info("[Poseidon] Starting Project Poseidon Modules!");
-
-        PoseidonConfig.getInstance();
-        UUIDManager.getInstance();
-
-        //Start Watchdog
-        watchDogThread = new WatchDogThread(Thread.currentThread());
-        if (PoseidonConfig.getInstance().getBoolean("settings.enable-watchdog", true)) {
-            log.info("[Poseidon] Starting Watchdog to detect any server hangs!");
-            watchDogThread.start();
-            watchDogThread.tickUpdate();
-        }
-        //Start Poseidon Statistics
-        if (PoseidonConfig.getInstance().getBoolean("settings.settings.statistics.enabled", true)) {
-//            new PoseidonStatisticsAgent(this, this.server);
-        } else {
-            log.info("[Poseidon] Please consider enabling statistics in Poseidon.yml. It helps us see how many servers are running Poseidon, and what versions.");
-        }
-
-        log.info("[Poseidon] Finished loading Project Poseidon Modules!");
+        Poseidon.getServer().initializeServer();
         //Project Poseidon End
 
         // CraftBukkit start
@@ -372,11 +359,10 @@ public class MinecraftServer implements Runnable, ICommandListener {
         log.info("Stopping server");
 
         //Project Poseidon Start
-        UUIDManager.getInstance().saveJsonArray();
-        if (watchDogThread != null) {
-            log.info("Stopping Poseidon Watchdog");
-            watchDogThread.interrupt();
-        }
+
+        // This is done before disablePlugins() to ensure the watchdog doesn't detect plugins disabling as a server hang
+        Poseidon.getServer().shutdownServer();
+
         //Project Poseidon End
 
         // CraftBukkit start
@@ -396,6 +382,74 @@ public class MinecraftServer implements Runnable, ICommandListener {
             this.saveChunks();
         }
         // CraftBukkit end
+
+        // Poseidon Start
+        Map<String, PerformanceStatistic> listenerStatistics = new HashMap<>();
+
+        // Only get the Listener Statistics if the Poseidon Server is not null. Prevents null pointer exceptions.
+        if (Poseidon.getServer() != null && Poseidon.getServer().getConfig().getConfigBoolean("settings.performance-monitoring.listener-reporting.print-statistics-on-shutdown.enabled")) {
+            listenerStatistics = Poseidon.getServer().getSortedListenerPerformance();
+        }
+
+        // Check if the statistics map is not empty
+        if (listenerStatistics != null && !listenerStatistics.isEmpty()) {
+            log.info("[Poseidon] Listener statistics from this session:");
+
+            // Iterate over each listener and log their statistics
+            for (Map.Entry<String, PerformanceStatistic> entry : listenerStatistics.entrySet()) {
+                String listener = entry.getKey();
+                PerformanceStatistic stats = entry.getValue();
+
+                if (stats.getMaxExecutionTime() == 0) {
+                    continue;
+                }
+
+                if (stats != null) {
+                    log.info(String.format("[Poseidon] Listener: %s - Processed %d events, Total Execution Time: %d ms, Avg Time: %d ms",
+                            listener,
+                            stats.getEventCount(),
+                            stats.getTotalExecutionTime(),
+                            stats.getAverageExecutionTime()));
+                } else {
+                    log.warning("[Poseidon] No statistics available for listener: " + listener);
+                }
+            }
+        }
+
+
+        // Check if the statistics map is not empty
+
+        Map<String, PerformanceStatistic> taskStatistics = new HashMap<>();
+
+        // Only get the Task Statistics if the Poseidon Server is not null. Prevents null pointer exceptions.
+        if (Poseidon.getServer() != null && Poseidon.getServer().getConfig().getConfigBoolean("settings.performance-monitoring.listener-reporting.print-statistics-on-shutdown.enabled")) {
+            taskStatistics = Poseidon.getServer().getSortedTaskPerformance();
+        }
+
+        if (taskStatistics != null && !taskStatistics.isEmpty()) {
+            log.info("[Poseidon] Synchronous task statistics from this session:");
+
+            // Iterate over each task and log their statistics
+            for (Map.Entry<String, PerformanceStatistic> entry : taskStatistics.entrySet()) {
+                String task = entry.getKey();
+                PerformanceStatistic stats = entry.getValue();
+
+                if (stats.getMaxExecutionTime() == 0) {
+                    continue;
+                }
+
+                if (stats != null) {
+                    log.info(String.format("[Poseidon] Task: %s - Processed %d events, Total Execution Time: %d ms, Avg Time: %d ms",
+                            task,
+                            stats.getEventCount(),
+                            stats.getTotalExecutionTime(),
+                            stats.getAverageExecutionTime()));
+                } else {
+                    log.warning("[Poseidon] No statistics available for task: " + task);
+                }
+            }
+        }
+        // Poseidon End
     }
 
     public void a() {
@@ -433,7 +487,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
                     } else {
                         while (j > 50L) {
                             MinecraftServer.currentTick = (int) (System.currentTimeMillis() / 50); // CraftBukkit
-                            watchDogThread.tickUpdate(); // Project Poseidon
+                            getWatchdog().tickUpdate(); // Project Poseidon
                             j -= 50L;
                             this.h();
                         }
@@ -520,7 +574,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
         if (currentTime - lastTick >= 1000) {
             double tps = tickCount / ((currentTime - lastTick) / 1000.0);
             tpsRecords.addFirst(tps);
-            if(tpsRecords.size() > 900) { //Don't keep more than 15 minutes of data
+            if (tpsRecords.size() > 900) { //Don't keep more than 15 minutes of data
                 tpsRecords.removeLast();
             }
 
@@ -531,7 +585,6 @@ public class MinecraftServer implements Runnable, ICommandListener {
         //Project Poseidon End - Tick Update
 
 
-
         for (j = 0; j < this.worlds.size(); ++j) { // CraftBukkit
             // if (j == 0 || this.propertyManager.getBoolean("allow-nether", true)) { // CraftBukkit
             WorldServer worldserver = this.worlds.get(j); // CraftBukkit
@@ -540,7 +593,7 @@ public class MinecraftServer implements Runnable, ICommandListener {
                 // CraftBukkit start - only send timeupdates to the people in that world
                 for (int i = 0; i < worldserver.players.size(); ++i) { // Project Poseidon: serverConfigurationManager -> worldserver.players
                     EntityPlayer entityPlayer = (EntityPlayer) worldserver.players.get(i);
-                    if(entityPlayer != null) {
+                    if (entityPlayer != null) {
                         entityPlayer.netServerHandler.sendPacket(new Packet4UpdateTime(entityPlayer.getPlayerTime())); // Add support for per player time
 
                     }
@@ -652,6 +705,6 @@ public class MinecraftServer implements Runnable, ICommandListener {
     }
 
     public WatchDogThread getWatchdog() {
-        return this.watchDogThread;
+        return Poseidon.getServer().getWatchDogThread();
     }
 }

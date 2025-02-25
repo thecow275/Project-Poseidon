@@ -4,6 +4,11 @@ import com.avaje.ebean.config.DataSourceConfig;
 import com.avaje.ebean.config.ServerConfig;
 import com.avaje.ebean.config.dbplatform.SQLitePlatform;
 import com.avaje.ebeaninternal.server.lib.sql.TransactionIsolation;
+import com.legacyminecraft.poseidon.Poseidon;
+import com.legacyminecraft.poseidon.PoseidonConfig;
+import com.legacyminecraft.poseidon.PoseidonPlugin;
+import com.legacyminecraft.poseidon.PoseidonServer;
+import com.legacyminecraft.poseidon.utility.PoseidonVersionChecker;
 import jline.ConsoleReader;
 import net.minecraft.server.*;
 import org.bukkit.Bukkit;
@@ -55,14 +60,14 @@ public final class CraftServer implements Server {
     private final String serverName = "Project Poseidon Craftbukkit";
     //Poseidon Versions
     private final String serverEnvironment = "POSEIDON";
-    private final String serverVersion = "1.1.8";
+    private final String serverVersion = "1.1.10";
     private final String releaseType = "DEVELOPMENT";
     private final String protocolVersion = "1.7.3";
     private final String GameVersion = "b1.7.3";
     private final ServicesManager servicesManager = new SimpleServicesManager();
-    private final BukkitScheduler scheduler = new CraftScheduler(this);
+    private final BukkitScheduler scheduler;
     private final SimpleCommandMap commandMap = new SimpleCommandMap(this);
-    private final PluginManager pluginManager = new SimplePluginManager(this, commandMap);
+    private final PluginManager pluginManager;
     protected final MinecraftServer console;
     protected final ServerConfigurationManager server;
     private final Map<String, World> worlds = new LinkedHashMap<String, World>();
@@ -78,16 +83,20 @@ public final class CraftServer implements Server {
 
         Bukkit.setServer(this);
 
+        //Project Poseidon Start
+        PoseidonServer poseidonServer = new PoseidonServer(console, this);
+        Poseidon.setServer(poseidonServer);
+        //Project Poseidon End
+
+        this.pluginManager = new SimplePluginManager(this, commandMap); //Project Poseidon - This must run after PoseidonServer is set
+        this.scheduler = new CraftScheduler(this); //Project Poseidon - This must run after PoseidonServer is set
+
         configuration = new Configuration((File) console.options.valueOf("bukkit-settings"));
         loadConfig();
         loadPlugins();
         enablePlugins(PluginLoadOrder.STARTUP);
 
         ChunkCompressionThread.startThread();
-
-        // Project Poseidon start
-        addHiddenCommands(Arrays.asList("login", "l", "register", "reg", "unregister", "changepassword", "changepw"));
-        // Project Poseidon end
     }
 
     private void loadConfig() {
@@ -852,27 +861,6 @@ public final class CraftServer implements Server {
 
     public void setShuttingdown(boolean shuttingdown) {
         this.shuttingdown = shuttingdown;
-    }
-
-    public boolean isCommandHidden(String cmdName) {
-        return hiddenCommands.contains(cmdName.toLowerCase());
-    }
-
-    public void addHiddenCommand(String cmd) {
-        cmd = cmd.toLowerCase();
-
-        if(hiddenCommands.contains(cmd)) {
-            Logger.getLogger(NetServerHandler.class.getName()).warning("List of Hidden commands already contains " + cmd);
-            return;
-        }
-
-        hiddenCommands.add(cmd);
-    }
-
-    public void addHiddenCommands(List<String> commands) {
-        for(String cmd : commands) {
-            addHiddenCommand(cmd);
-        }
     }
 
 //    public GameMode getDefaultGameMode() {
